@@ -1,0 +1,7 @@
+[package]
+name = "aoc_2024_day2"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+column_reader   = { path = "../column_reader" }
