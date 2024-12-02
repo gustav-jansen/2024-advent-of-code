@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 column_reader   = { path = "../column_reader" }
+row_reader   = { path = "../row_reader" }

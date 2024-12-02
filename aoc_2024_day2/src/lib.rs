@@ -24,92 +24,40 @@ impl Config {
     }
 }
 
-pub fn safe_changes(vec_a: &Vec<usize>, vec_b: &Vec<usize>) -> Vec<bool> {
-    let result: Vec<bool> = vec_a.iter()
-        .zip(vec_b.iter())
-        .map(|(a,b)|
-             if a > b {
-                 a-b >= 1 && a-b <= 3
-             } else {
-                 b-a >= 1 && b-a <= 3
-             })
-    .collect();
+pub fn safe_changes(row: &Vec<usize>) -> bool {
+    if row.len() < 2 { return true; }
 
-    result
-}
-
-pub fn safe_changes_with_conditions(vec_a: &Vec<usize>, vec_b: &Vec<usize>, increasing: &Vec<bool>) -> Vec<bool> {
-    let result: Vec<bool> = vec_a.iter()
-        .zip(vec_b.iter())
-        .zip(increasing.iter())
-        .map(|((a,b), &increases)|
-             if a < b && increases {
-                 b-a >=1 && b-a <= 3
-             } else if a > b && !increases {
-                a-b >= 1 && a-b <= 3
-             } else {
-                 false
-             })
-    .collect();
-
-    result
-}
-
-pub fn safe_changes_increasing(vec_a: &Vec<usize>, vec_b: &Vec<usize>) -> Vec<bool> {
-    let result: Vec<bool> = vec_a.iter()
-        .zip(vec_b.iter())
-        .map(|(a,b)|
-             if a < b {
-                 b-a >= 1 && b-a <= 3
-             } else {false}
-             )
-    .collect();
-
-    result
-}
-pub fn safe_changes_decreasing(vec_a: &Vec<usize>, vec_b: &Vec<usize>) -> Vec<bool> {
-    let result: Vec<bool> = vec_a.iter()
-        .zip(vec_b.iter())
-        .map(|(a,b)|
-             if a > b {
-                 a-b >= 1 && a-b <= 3
-             } else {false}
-             )
-    .collect();
-
-    result
-}
-pub fn safe_changes_total(columns: &Vec<Vec<usize>>) -> Vec<bool> {
-    if columns.len() == 0 {
-        let result: Vec<bool> = vec![true];
-        return result;
-    }
-
-    let mut result: Vec<bool> = vec![true; columns[0].len()];
-    if columns.len() == 1 {
-        return result;
-    }
-
-    let increasing = safe_changes_increasing(&columns[1], &columns[0]);
-    for i in 1..columns.len()-1 {
-        for (a, b) in result.iter_mut().zip(safe_changes_with_conditions(&columns[i], &columns[i-1], &increasing)) {
-            *a = *a && b;
+    let increasing = row[0] < row[1];
+    let mut result = true;
+    for i in 1..row.len() {
+        if row[i-1] < row[i] && increasing {
+            result = result && row[i]-row[i-1] >= 1 && row[i]-row[i-1] <= 3;
+        } else if row[i-1] > row[i] && !increasing {
+            result = result && row[i-1] - row[i] >= 1 && row[i-1] - row[i] <= 3;
+        } else {
+            result = false;
         }
     }
     result
 }
 
-pub fn safe_reports(columns: &Vec<Vec<usize>>) -> usize {
-    let result = safe_changes_total(columns);
+pub fn safe_changes_total(rows: &Vec<Vec<usize>>) -> Vec<bool> {
+    rows.iter()
+        .map(|a| safe_changes(a))
+        .collect()
+}
+
+pub fn safe_reports(rows: &Vec<Vec<usize>>) -> usize {
+    let result = safe_changes_total(rows);
 
     result.iter().filter(|&&x| x).count()
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let columns = column_reader::read_columns_from_file(
-        &config.file_path, 5)?;
+    let rows = row_reader::read_rows_from_file(
+        &config.file_path)?;
 
-    let number_of_safe_reports = safe_reports(&columns);
+    let number_of_safe_reports = safe_reports(&rows);
     println!("Number of safe reports: {}", number_of_safe_reports);
 
     Ok(())
@@ -120,81 +68,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_safe_changes_for_identical() -> Result<(), Box<dyn std::error::Error>> {
-        let vec_a: Vec<usize> = vec![1,2,3,4,5];
-        let vec_b: Vec<usize> = vec![1,2,3,4,5];
-
-        let result: Vec<bool> = safe_changes(&vec_a, &vec_b);
-
-        let actual = vec![false,false,false,false,false];
-        assert_eq!(result.len(), actual.len());
-
-        if result == actual {
-            Ok(())
-        } else {
-            return Err(format!("Found {:?}, expected {:?}", result, actual).into());
-        }
-    }
-
-    #[test]
-    fn test_safe_changes_for_greater() -> Result<(), Box<dyn std::error::Error>> {
-        let vec_a: Vec<usize> = vec![1,2,3,4,5];
-        let vec_b: Vec<usize> = vec![2,4,6,9,8];
-
-        let result: Vec<bool> = safe_changes(&vec_a, &vec_b);
-
-        let actual = vec![true,true,true,false,true];
-        assert_eq!(result.len(), actual.len());
-
-        if result == actual {
-            Ok(())
-        } else {
-            return Err(format!("Found {:?}, expected {:?}", result, actual).into());
-        }
-    }
-
-    #[test]
-    fn test_safe_changes_for_lesser() -> Result<(), Box<dyn std::error::Error>> {
-        let vec_a: Vec<usize> = vec![7,2,3,4,5];
-        let vec_b: Vec<usize> = vec![2,1,1,2,2];
-
-        let result: Vec<bool> = safe_changes(&vec_a, &vec_b);
-
-        let actual = vec![false,true,true,true,true];
-        assert_eq!(result.len(), actual.len());
-
-        if result == actual {
-            Ok(())
-        } else {
-            return Err(format!("Found {:?}, expected {:?}", result, actual).into());
-        }
-    }
-
-    #[test]
-    fn test_safe_changes_for_mixed() -> Result<(), Box<dyn std::error::Error>> {
-        let vec_a: Vec<usize> = vec![7,2,3,4,5,7,8,9,15];
-        let vec_b: Vec<usize> = vec![2,1,4,2,2,11,10,12,15];
-
-        let result: Vec<bool> = safe_changes(&vec_a, &vec_b);
-
-        let actual = vec![false,true,true,true,true,false,true,true,false];
-        assert_eq!(result.len(), actual.len());
-
-        if result == actual {
-            Ok(())
-        } else {
-            return Err(format!("Found {:?}, expected {:?}", result, actual).into());
-        }
-    }
-
-    #[test]
     fn test_safe_changes_total() -> Result<(), Box<dyn std::error::Error>> {
         let input: Vec<Vec<usize>> = vec![
-            [7,1,9,1,8,1].to_vec(),
-            [6,2,7,3,6,3].to_vec(),
-            [4,7,6,2,4,6].to_vec(),
-            [2,8,2,4,4,7].to_vec(),
-            [1,9,1,5,1,9].to_vec()
+            [7,6,4,2,1].to_vec(),
+            [1,2,7,8,9].to_vec(),
+            [9,7,6,2,1].to_vec(),
+            [1,3,2,4,5].to_vec(),
+            [8,6,4,4,1].to_vec(),
+            [1,3,6,7,9].to_vec()
         ];
 
         let actual = vec![true, false, false, false, false, true];
@@ -210,11 +91,12 @@ mod tests {
     #[test]
     fn test_safe_reports() {
         let input: Vec<Vec<usize>> = vec![
-            [7,1,9,1,8,1].to_vec(),
-            [6,2,7,3,6,3].to_vec(),
-            [4,7,6,2,4,6].to_vec(),
-            [2,8,2,4,4,7].to_vec(),
-            [1,9,1,5,1,9].to_vec()
+            [7,6,4,2,1].to_vec(),
+            [1,2,7,8,9].to_vec(),
+            [9,7,6,2,1].to_vec(),
+            [1,3,2,4,5].to_vec(),
+            [8,6,4,4,1].to_vec(),
+            [1,3,6,7,9].to_vec()
         ];
 
         assert_eq!(safe_reports(&input), 2);
