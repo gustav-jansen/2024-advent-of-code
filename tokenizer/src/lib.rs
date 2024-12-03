@@ -1,20 +1,33 @@
 use std::any::Any;
+use std::fmt;
 
-pub trait Token: Any {
+pub trait Token: Any +fmt::Display {
     fn as_any(&self) -> &dyn Any;
 }
 
+// ErrorToken
 pub struct ErrorToken;
 impl Token for ErrorToken {
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
+impl fmt::Display for ErrorToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<ErrorToken>")
+    }
+}
 
+// NoneToken
 pub struct NoneToken;
 impl Token for NoneToken {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+impl fmt::Display for NoneToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<NoneToken>")
     }
 }
 
@@ -27,6 +40,11 @@ impl Token for WordToken {
         self
     }
 }
+impl fmt::Display for WordToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<WordToken>(\"{}\")", self.word)
+    }
+}
 
 pub struct CharToken {
     c: char,
@@ -35,6 +53,11 @@ pub struct CharToken {
 impl Token for CharToken {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+impl fmt::Display for CharToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<CharToken>('{}')", self.c)
     }
 }
 
@@ -47,6 +70,13 @@ impl Token for NumToken {
         self
     }
 }
+
+impl fmt::Display for NumToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<NumToken>({})", self.val)
+    }
+}
+
 
 pub trait TokenReader {
     fn contains_token(&self, text: &str) -> bool;
@@ -161,7 +191,25 @@ pub fn read_next_token(token_readers: &Vec<Box<dyn TokenReader>>, text: &str) ->
     }
     None
 }
-    
+
+pub fn tokenize(token_readers: &Vec<Box<dyn TokenReader>>, text: &str)
+        -> Vec<Box<dyn Token>> {
+    let mut i: usize = 0;
+    let mut result:Vec<Box<dyn Token>> = Vec::new();
+
+    while i < text.len() {
+        if let Some((token, j)) = read_next_token(token_readers, &text[i..]) {
+            result.push(token);
+            i += j;
+        } else {
+            break;
+        }
+
+    }
+
+    result
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -194,7 +242,7 @@ mod tests {
         } else {
             assert!(false);
         }
-        
+
     }
 
     #[test]
@@ -281,7 +329,7 @@ mod tests {
         } else {
             assert!(false);
         }
-        
+
     }
 
     #[test]
@@ -300,6 +348,27 @@ mod tests {
         } else {
             assert!(false);
         }
-        
+    }
+
+    #[test]
+    fn test_tokenize() {
+        let input = "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
+        let mut readers: Vec<Box<dyn TokenReader>> = Vec::new();
+        readers.push(Box::new(WordReader{word: "don't()".to_string()}));
+        readers.push(Box::new(WordReader{word: "do()".to_string()}));
+        readers.push(Box::new(CharReader{c: ')'}));
+        readers.push(Box::new(CharReader{c: ','}));
+        readers.push(Box::new(CharReader{c: '('}));
+        readers.push(Box::new(NumReader));
+        readers.push(Box::new(NoneReader));
+        readers.push(Box::new(WordReader{word: "mul".to_string()}));
+
+        let tokens = tokenize(&readers, &input);
+
+        for token in &tokens {
+            println!("{}", token);
+        }
+
+        assert_eq!(46, tokens.len());
     }
 }
