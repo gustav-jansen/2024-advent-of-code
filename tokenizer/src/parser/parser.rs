@@ -1,5 +1,6 @@
 use crate::token::Token;
-use crate::reader::TokenReader;
+use crate::reader::{TokenReader,NoneReader,NumReader,WordReader,CharReader,CatchAllReader};
+use crate::visitor::{TokenVisitor,MultiplicationVisitor};
 
 pub fn read_next_token(token_readers: &Vec<Box<dyn TokenReader>>, text: &str) -> Option<(Box<dyn Token>, usize)> {
     for reader in token_readers {
@@ -7,6 +8,7 @@ pub fn read_next_token(token_readers: &Vec<Box<dyn TokenReader>>, text: &str) ->
             return reader.read_token(text);
         }
     }
+    println!("Returned without finding tokens");
     None
 }
 
@@ -16,6 +18,7 @@ pub fn tokenize(token_readers: &Vec<Box<dyn TokenReader>>, text: &str)
     let mut result:Vec<Box<dyn Token>> = Vec::new();
 
     while i < text.len() {
+        println!("{} of {}", i, text.len());
         if let Some((token, j)) = read_next_token(token_readers, &text[i..]) {
             result.push(token);
             i += j;
@@ -28,12 +31,37 @@ pub fn tokenize(token_readers: &Vec<Box<dyn TokenReader>>, text: &str)
     result
 }
 
+pub fn process_tokens(visitor: &mut dyn TokenVisitor, tokens: &Vec<Box<dyn Token>> ) -> usize {
+    for token in tokens {
+        token.accept(visitor);
+    }
+
+    visitor.get_result()
+}
+
+pub fn process_text(input: &str) -> usize {
+        let mut readers: Vec<Box<dyn TokenReader>> = Vec::new();
+        readers.push(Box::new(WordReader{word: "mul".to_string()}));
+        readers.push(Box::new(WordReader{word: "don't()".to_string()}));
+        readers.push(Box::new(WordReader{word: "do()".to_string()}));
+        readers.push(Box::new(CharReader{c: ')'}));
+        readers.push(Box::new(CharReader{c: ','}));
+        readers.push(Box::new(CharReader{c: '('}));
+        readers.push(Box::new(NumReader));
+        readers.push(Box::new(NoneReader));
+        readers.push(Box::new(CatchAllReader));
+
+        let tokens = tokenize(&readers, &input);
+
+        let mut visitor = MultiplicationVisitor::new();
+
+        process_tokens(&mut visitor, &tokens)
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::token::{NoneToken,NumToken,WordToken,CharToken};
-    use crate::reader::{TokenReader,NoneReader,NumReader,WordReader,CharReader};
 
     #[test]
     fn test_none_reader() {
@@ -190,5 +218,40 @@ mod tests {
         }
 
         assert_eq!(46, tokens.len());
+    }
+
+    #[test]
+    fn test_process_tokens() {
+        let input = "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
+        let mut readers: Vec<Box<dyn TokenReader>> = Vec::new();
+        readers.push(Box::new(WordReader{word: "don't()".to_string()}));
+        readers.push(Box::new(WordReader{word: "do()".to_string()}));
+        readers.push(Box::new(CharReader{c: ')'}));
+        readers.push(Box::new(CharReader{c: ','}));
+        readers.push(Box::new(CharReader{c: '('}));
+        readers.push(Box::new(NumReader));
+        readers.push(Box::new(NoneReader));
+        readers.push(Box::new(WordReader{word: "mul".to_string()}));
+
+        let tokens = tokenize(&readers, &input);
+
+        for token in &tokens {
+            println!("{}", token);
+        }
+
+        assert_eq!(46, tokens.len());
+
+        let mut visitor = MultiplicationVisitor::new();
+
+        let result = process_tokens(&mut visitor, &tokens);
+        assert_eq!(48, result);
+    }
+
+    #[test]
+    fn test_process_text() {
+        let input = "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
+
+        let result = process_text(input);
+        assert_eq!(48, result);
     }
 }

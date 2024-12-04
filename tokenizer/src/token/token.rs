@@ -1,12 +1,31 @@
 use std::any::Any;
 use std::fmt;
-use super::traits::Token;
 
-// ErrorToken
+use super::traits::Token;
+use crate::visitor::TokenVisitor;
+
+pub struct CatchAllToken;
+impl Token for CatchAllToken {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_catchall_token(self);
+    }
+}
+impl fmt::Display for CatchAllToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<CatchAllToken>")
+    }
+}
+
 pub struct ErrorToken;
 impl Token for ErrorToken {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_error_token(self);
     }
 }
 impl fmt::Display for ErrorToken {
@@ -15,11 +34,13 @@ impl fmt::Display for ErrorToken {
     }
 }
 
-// NoneToken
 pub struct NoneToken;
 impl Token for NoneToken {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_none_token(self);
     }
 }
 impl fmt::Display for NoneToken {
@@ -36,6 +57,9 @@ impl Token for WordToken {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_word_token(self);
+    }
 }
 impl fmt::Display for WordToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -51,6 +75,9 @@ impl Token for CharToken {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_char_token(self);
+    }
 }
 impl fmt::Display for CharToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -65,6 +92,9 @@ pub struct NumToken {
 impl Token for NumToken {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn accept(&self, visitor: &mut dyn TokenVisitor) {
+        visitor.visit_num_token(self);
     }
 }
 

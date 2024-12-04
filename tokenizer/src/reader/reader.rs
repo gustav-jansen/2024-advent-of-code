@@ -1,6 +1,6 @@
 use super::traits::TokenReader;
 
-use crate::token::{Token,NumToken,NoneToken,WordToken,CharToken};
+use crate::token::{CatchAllToken, CharToken, ErrorToken, NoneToken, NumToken, Token, WordToken};
 
 pub struct NoneReader;
 
@@ -17,7 +17,7 @@ impl TokenReader for NoneReader {
         if let Some(first_char) = text.chars().next() {
             self.is_valid_char(first_char)
         } else {
-            true
+            false
         }
     }
 
@@ -30,7 +30,28 @@ impl TokenReader for NoneReader {
                 break;
             }
         }
-        Some((Box::new(NoneToken), token_string.len()))
+        if token_string.len() > 0 {
+            println!("Found NoneToken: {}", token_string);
+            Some((Box::new(NoneToken), token_string.len()))
+        } else {
+            Some((Box::new(ErrorToken), 0))
+        }
+    }
+}
+
+pub struct CatchAllReader;
+impl TokenReader for CatchAllReader {
+    fn contains_token(&self, text:&str) -> bool {
+        text.len() > 0
+    }
+
+    fn read_token(&self, text: &str) -> Option<(Box<dyn Token>, usize)> {
+        if text.len() > 0 {
+            println!("Found CatchAllToken: {}", &text[..1]);
+            Some((Box::new(CatchAllToken), 1))
+        } else {
+            Some((Box::new(ErrorToken), 0))
+        }
     }
 }
 
@@ -40,18 +61,21 @@ pub struct WordReader {
 
 impl TokenReader for WordReader {
     fn contains_token(&self, text:&str) -> bool {
+        let mut result = false;
         if text.len() >= self.word.len() {
-            &text[..self.word.len()] == self.word
-        } else {
-            false
+            result = &text[..self.word.len()] == self.word;
         }
+        if text.len() >= self.word.len() {
+        }
+        result
     }
 
     fn read_token(&self, text: &str) -> Option<(Box<dyn Token>, usize)> {
         if &text[..self.word.len()] == self.word {
+            println!("Found WordToken: {}", &text[..self.word.len()]);
             Some((Box::new(WordToken{word: self.word.clone()}), self.word.len()))
         } else {
-            None
+            Some((Box::new(ErrorToken), 0))
         }
     }
 }
@@ -71,9 +95,10 @@ impl TokenReader for CharReader {
 
     fn read_token(&self, text: &str) -> Option<(Box<dyn Token>, usize)> {
         if &text[..1] == self.c.to_string() {
+            println!("Found CharToken: {}", &text[..1]);
             Some((Box::new(CharToken{c: self.c}), 1))
         } else {
-            None
+            Some((Box::new(ErrorToken), 0))
         }
     }
 }
@@ -97,11 +122,11 @@ impl TokenReader for NumReader {
             else { break}
         }
 
-        let res: usize = s.parse().unwrap();
-        if res == 0 {
-            None
-        } else {
+        if let Ok(res) = s.parse::<usize>() {
+            println!("Found NumToken: {}", res);
             Some((Box::new(NumToken{val: res}), s.len()))
+        } else {
+            Some((Box::new(ErrorToken), 0))
         }
     }
 }
