@@ -1,7 +1,7 @@
 use std::process;
 use std::env;
 
-use advent_2024_day_1a::Config;
+use aoc_2024_day1::Config;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -11,7 +11,7 @@ fn main() {
         process::exit(1);
     });
 
-    if let Err(err) = advent_2024_day_1a::run(config) {
+    if let Err(err) = aoc_2024_day1::run(config) {
         println!("Application error: {err}");
         process::exit(1);
     }
