@@ -1,3 +1,4 @@
+#[derive(Debug,PartialEq)]
 pub struct Matrix<T> {
     elements: Vec<T>,
     pub nrows: usize,
@@ -32,6 +33,10 @@ impl<T: Clone> Matrix<T> {
         } else {
             Err("Index out of bounds")
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item=&T> {
+        self.elements.iter()
     }
 }
 
