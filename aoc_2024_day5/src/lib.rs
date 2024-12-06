@@ -6,17 +6,53 @@ use config::Config;
 #[derive(Debug,PartialEq)]
 pub struct Update {
     pages: Vec<usize>,
-    middle: usize,
 }
 
 impl Update {
     pub fn new( pages: Vec<usize> ) -> Self {
-        let middle = pages[pages.len()/2 + 1];
+        Update{ pages }
+    }
 
-        Update{ pages, middle }
+    pub fn is_valid(&self, ordering: &HashSet<(usize, usize)>) -> bool {
+        self.pages
+            .iter()
+            .enumerate()
+            .skip(1)
+            .all(|(i, &page_i)| {
+                self.pages[..i]
+                    .iter()
+                    .all(|&page_j| {
+                        !ordering.contains(&(page_i, page_j))
+                    })
+            })
+    }
+
+    pub fn middle(&self) -> usize {
+        let middle_index = self.pages.len() / 2;
+        *self.pages.get(middle_index).unwrap_or(&0)
+    }
+
+    pub fn reorder(&mut self, ordering: &HashSet<(usize, usize)>) {
+        for i in 1..self.pages.len() {
+            for j in 0..i {
+                if ordering.contains(&(self.pages[i],self.pages[j])) {
+                    self.pages.swap(i, j);
+                }
+            }
+        }
+    }
+
+    pub fn get_reordered(&self, ordering: &HashSet<(usize, usize)>) -> Update {
+        let mut update = Update::new(self.pages.clone());
+
+        update.reorder(ordering);
+
+        update
     }
 }
 
+
+#[derive(Debug,PartialEq)]
 pub struct Queue {
     ordering: HashSet<(usize,usize)>,
     updates: Vec<Update>,
@@ -26,10 +62,33 @@ impl Queue {
     pub fn new() -> Self {
         Self { ordering: HashSet::new(), updates: Vec::new() }
     }
+
+    pub fn calculate_sum_of_reordered_middle_pages(&mut self) -> usize {
+        self.updates
+            .iter()
+            .filter(|update| {
+                !update.is_valid(&self.ordering)
+            })
+            .map(|update| {
+                update.get_reordered(&self.ordering).middle()
+            })
+            .sum()
+    }
+    pub fn calculate_sum_of_valid_middle_pages(&self) -> usize {
+        self.updates
+            .iter()
+            .filter(|update| {
+                update.is_valid(&self.ordering)
+            })
+            .map(|update| {
+                update.middle()
+            })
+            .sum()
+    }
+
 }
 
 pub fn parse_ordering(content: &str) -> Result<HashSet<(usize,usize)>, Box<dyn Error>> {
-
     let mut ordering: HashSet<(usize, usize)> = HashSet::new();
 
     for line in content.lines().filter(|line| !line.trim().is_empty()) {
@@ -39,22 +98,27 @@ pub fn parse_ordering(content: &str) -> Result<HashSet<(usize,usize)>, Box<dyn E
             return Err(format!("Line does not contain an ordering: {}", line).into());
         }
 
-        ordering.insert((words[0].parse::<usize>()?, words[1].parse::<usize>()?));
+        ordering.insert(
+            (
+                words[0].parse::<usize>()?,
+                words[1].parse::<usize>()?)
+            );
     }
 
     Ok(ordering)
 }
 
 pub fn parse_updates(content: &str) -> Result<Vec<Update>, Box<dyn Error>> {
-
     let mut updates: Vec<Update> = Vec::new();
-    for line in content.lines().filter(|line| !line.trim().is_empty()) {
 
+    for line in content.lines().filter(|line| !line.trim().is_empty()) {
         let words: Vec<&str> = line.split(',').collect();
 
         let mut pages: Vec<usize> = Vec::with_capacity(words.len());
         for word in words {
-            pages.push(word.parse::<usize>()?);
+            pages.push(
+                word.parse::<usize>()?
+            );
         }
 
         updates.push( Update::new(pages) );
@@ -66,28 +130,36 @@ pub fn parse_updates(content: &str) -> Result<Vec<Update>, Box<dyn Error>> {
 pub fn parse_content(content: &str) -> Result<Queue, Box<dyn Error>> {
     let mut parts = content.split("\n\n");
 
-    let ordering_content = parts.next().ok_or("Unexpected content format")?;
-    let updates_content = parts.next().ok_or("Unexpected content format")?;
+    let ordering = parse_ordering(
+        parts.next().ok_or("Unexpected content format")?
+    )?;
 
-    let ordering = parse_ordering(ordering_content)?;
-    let updates = parse_updates(updates_content)?;
-
+    let updates = parse_updates(
+        parts.next().ok_or("Unexpected content format")?
+    )?;
 
     Ok( Queue{ ordering, updates } )
 }
 
+
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let content = fs::read_to_string(config.file_path)?;
 
-    let queue = parse_content(&content)?;
-    
+    let mut queue = parse_content(&content)?;
+
+    let sum_of_valid_middles = queue.calculate_sum_of_valid_middle_pages();
+    let sum_of_reordered_middles = queue.calculate_sum_of_reordered_middle_pages();
+
+    println!("Sum of valid middles: {sum_of_valid_middles}");
+    println!("Sum of reordered  middles: {sum_of_reordered_middles}");
+
     Ok(())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
 use std::collections::HashSet;
-    
+
     fn fill_hashset() -> HashSet<(usize,usize)> {
         let mut actual: HashSet<(usize,usize)> = HashSet::new();
         actual.insert((47,53));
@@ -150,6 +222,14 @@ use std::collections::HashSet;
 97,13,75,29,47"
     }
 
+    fn fill_with_content() -> String {
+        let mut s: String = String::new();
+        s += fill_with_ordering();
+        s += "\n\n";
+        s += fill_with_updates();
+        s
+    }
+
     fn fill_updates() -> Vec<Update> {
         let mut updates: Vec<Update> = Vec::new();
 
@@ -161,6 +241,10 @@ use std::collections::HashSet;
         updates.push( Update::new([97,13,75,29,47].to_vec()));
 
         updates
+    }
+
+    fn fill_content() -> Queue {
+        Queue {ordering: fill_hashset(), updates: fill_updates() }
     }
 
     #[test]
@@ -188,4 +272,29 @@ use std::collections::HashSet;
             Err(format!("Found: {:?}, expected: {:?}", updates, actual).into())
         }
     }
+
+    #[test]
+    fn test_parse_content() -> Result<(), Box<dyn std::error::Error>> {
+        let input = fill_with_content();
+        let content = parse_content(&input)?;
+        let actual = fill_content();
+
+        if actual == content {
+            Ok(())
+        } else {
+            Err(format!("Found: {:?}, expected: {:?}", content, actual).into())
+        }
+    }
+
+    #[test]
+    fn test_is_valid() {
+        let input = fill_with_ordering();
+        let ordering = parse_ordering(input).unwrap();
+        let pages: Vec<usize> = vec![75,47,61,53,29];
+        let update: Update = Update::new(pages);
+
+        assert!(update.is_valid(&ordering));
+
+    }
+
 }
