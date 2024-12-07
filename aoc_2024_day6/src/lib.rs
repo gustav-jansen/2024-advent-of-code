@@ -7,11 +7,29 @@ use matrix::Matrix;
 static BLOCKED: char = '#';
 static START: char = '^';
 static VISITED: char = '#';
-static UP: usize = 0;
-static RIGHT: usize = 1;
-static DOWN: usize = 2;
-static LEFT: usize = 3;
 
+#[repr(usize)]
+#[derive(PartialEq,Debug,Clone, Copy)]
+enum Orientation {
+    Up = 0,
+    Right,
+    Down,
+    Left,
+}
+
+
+impl Orientation {
+
+    fn next(&mut self) {
+        *self = match *self {
+            Orientation::Up => Orientation::Right,
+            Orientation::Right => Orientation::Down,
+            Orientation::Down => Orientation::Left,
+            Orientation::Left => Orientation::Up,
+        };
+    }
+
+}
 
 #[derive(Debug,PartialEq)]
 pub struct Map {
@@ -19,19 +37,17 @@ pub struct Map {
     pub cols: Vec<Vec<usize>>,
     pub starting_position: (usize, usize),
 
-    map_size: (usize, usize),
-    max_vertical: usize,
-    max_horisontal: usize,
+    height: usize,
+    width: usize,
 }
 
 impl Map {
     pub fn new(rows: Vec<Vec<usize>>, cols: Vec<Vec<usize>>, starting_position: (usize, usize)) -> Self {
 
-        let map_size = (rows.len(), cols.len());
-        let max_vertical = map_size.0;
-        let max_horisontal = map_size.1;
+        let height = rows.len();
+        let width = cols.len();
 
-        Map { rows, cols, starting_position, map_size, max_vertical, max_horisontal }
+        Map { rows, cols, starting_position, height, width }
     }
 
     pub fn parse_input(input: &str) -> Self {
@@ -62,6 +78,13 @@ impl Map {
 
         Map::new(rows, cols, starting_position)
     }
+
+    pub fn is_inside(&self, position: (usize, usize)) -> bool {
+        let (row, col) = position;
+
+        row < self.height && col < self.width
+    }
+
 }
 
 #[derive(Debug,PartialEq)]
@@ -70,21 +93,104 @@ struct Path {
     pub current_position: (usize, usize),
     pub free_space: Matrix<(usize,usize,usize,usize)>,
     pub visited: Matrix<bool>,
+    pub orientation: Orientation,
 }
 
+type WalkFn = fn(&mut Path, usize, usize);
 impl Path {
     pub fn new(map: Map) -> Path {
 
         let current_position = map.starting_position;
         let free_space = Path::setup_free_space(&map);
 
-        let visited: Matrix<bool> = Matrix::new(map.map_size.0, map.map_size.1, false);
+        let mut visited: Matrix<bool> = Matrix::new(map.height, map.width, false);
+        visited.set(current_position.0, current_position.1, true).unwrap();
 
-        Path { map, current_position, free_space, visited }
+        Path { map, current_position, free_space, visited, orientation: Orientation::Up }
     }
 
+    fn walk_up(&mut self, row: usize, col: usize) {
+        let npos = self.free_space.get(row, col).unwrap().0;
+        println!("Walk up: {}, {}, {}", row, col, npos);
+
+        for walk in (row-npos+1..row).rev() {
+            println!("UP: walk: {}", walk);
+            self.visited.set(walk, col, true).unwrap();
+            self.current_position = (walk, col);
+        }
+
+        if self.current_position.0 == 0 {
+            self.current_position.0 = self.map.height;
+        }
+    }
+
+    fn walk_right(&mut self, row: usize, col: usize) {
+        let npos = self.free_space.get(row, col).unwrap().1;
+        println!("Walk right: {}, {}, {}", row, col, npos);
+
+        for walk in col+1..col+npos {
+            self.visited.set(row, walk, true).unwrap();
+            self.current_position = (row, walk);
+        }
+
+        if self.current_position.1 == self.map.width - 1 {
+            self.current_position.1 += 1;
+        }
+    }
+
+    fn walk_down(&mut self, row: usize, col: usize) {
+        let npos = self.free_space.get(row, col).unwrap().2;
+        println!("Walk down: {}, {}, {}", row, col, npos);
+
+        for walk in row+1..row+npos {
+            self.visited.set(walk, col, true).unwrap();
+            self.current_position = (walk, col);
+        }
+
+        if self.current_position.0 == self.map.height - 1 {
+            self.current_position.0 += 1;
+        }
+    }
+
+    fn walk_left(&mut self, row: usize, col: usize) {
+        let npos = self.free_space.get(row, col).unwrap().3;
+        println!("Walk left: {}, {}, {}", row, col, npos);
+
+        for walk in (col-npos+1..col).rev() {
+            self.visited.set(row, walk, true).unwrap();
+            self.current_position = (row, walk);
+        }
+
+        if self.current_position.1 == 0 {
+            self.current_position.1 = self.map.width;
+        }
+    }
+
+    fn walk_funcs() -> &'static [WalkFn] {
+        &[
+            Path::walk_up,
+            Path::walk_right,
+            Path::walk_down,
+            Path::walk_left,
+        ]
+    }
+
+    fn walk(&mut self) {
+
+        let row = self.current_position.0;
+        let col = self.current_position.1;
+
+        let funcs = Path::walk_funcs();
+        let index = self.orientation as usize;
+
+        if let Some(&walk_fn) = funcs.get(index) {
+            walk_fn(self, row, col);
+        } else {
+            panic!("Invalid Orientation index!");
+        }
+    }
     pub fn get_up_free_space(map: &Map) -> Matrix<usize> {
-        let mut free_space: Matrix<usize> = Matrix::new ( map.map_size.0, map.map_size.0, 0 );
+        let mut free_space: Matrix<usize> = Matrix::new ( map.height, map.width, 0 );
 
         let mut next_block_idx;
         let mut val;
@@ -114,12 +220,12 @@ impl Path {
     }
 
     pub fn get_right_free_space(map: &Map) -> Matrix<usize> {
-        let mut free_space: Matrix<usize> = Matrix::new ( map.map_size.0, map.map_size.1, 0 );
+        let mut free_space: Matrix<usize> = Matrix::new ( map.height, map.width, 0 );
 
         let mut next_block_idx;
         let mut val;
 
-        let max_val = map.map_size.1;
+        let max_val = map.width;
         for i in 0..map.rows.len() {
             next_block_idx = 0;
             for j in 0..map.cols.len() {
@@ -139,12 +245,12 @@ impl Path {
     }
 
     pub fn get_down_free_space(map: &Map) -> Matrix<usize> {
-        let mut free_space: Matrix<usize> = Matrix::new ( map.map_size.0, map.map_size.1, 0 );
+        let mut free_space: Matrix<usize> = Matrix::new( map.height, map.width, 0 );
 
         let mut next_block_idx;
         let mut val;
 
-        let max_val = map.map_size.0;
+        let max_val = map.height;
         for i in 0..map.cols.len() {
             next_block_idx = 0;
             for j in 0..map.rows.len() {
@@ -164,7 +270,7 @@ impl Path {
     }
 
     pub fn get_left_free_space(map: &Map) -> Matrix<usize> {
-        let mut free_space: Matrix<usize> = Matrix::new ( map.map_size.0, map.map_size.1, 0 );
+        let mut free_space: Matrix<usize> = Matrix::new ( map.height, map.width, 0 );
 
         let mut next_block_idx;
         let mut val;
@@ -201,13 +307,13 @@ impl Path {
         let left = Path::get_left_free_space(map);
 
         let mut free_space = Matrix::new(
-            map.map_size.0,
-            map.map_size.1,
+            map.height,
+            map.width,
             (
-                map.map_size.1,
-                map.map_size.0,
-                map.map_size.1,
-                map.map_size.0,
+                map.width,
+                map.height,
+                map.width,
+                map.height,
             )
         );
 
@@ -227,21 +333,27 @@ impl Path {
         Path::new(Map::parse_input(input))
     }
 
-    pub fn walk_the_path(&self) {
+    pub fn walk_the_path(&mut self) {
+        while self.map.is_inside(self.current_position) {
+            println!("Current position, orientation, is_inside: {:?}, {:?}, {}",
+                     self.current_position, self.orientation, self.map.is_inside(self.current_position));
+            self.walk();
+            self.orientation.next();
+        }
     }
 
-    pub fn count_avoided_positions(&self) -> usize {
-        self.visited.iter().count()
+    pub fn count_visited_positions(&self) -> usize {
+        self.visited.iter().filter(|&&v| v).count()
     }
 }
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let content = fs::read_to_string(config.file_path)?;
 
-    let path: Path = Path::parse_input(&content);
+    let mut path: Path = Path::parse_input(&content);
     path.walk_the_path();
 
-    let number_of_avoided_positions = path.count_avoided_positions();
-    println!("Number of avoided positions: {}", number_of_avoided_positions);
+    let number_of_visited_positions = path.count_visited_positions();
+    println!("Number of visited positions: {}", number_of_visited_positions);
 
     Ok(())
 }
@@ -323,12 +435,7 @@ mod tests {
     }
 
     fn create_path() -> Path {
-        Path {
-            map: create_map(),
-            current_position: (6,4),
-            free_space: Matrix::new(10, 10, (10,10,10,10)),
-            visited: Matrix::new(10,10, false)
-        }
+        Path::new(create_map())
     }
 
     #[test]
@@ -353,22 +460,21 @@ mod tests {
         assert!(path == actual);
     }
 
-/*
     #[test]
     fn test_walk_the_path() {
         let input = construct_input();
-        let path = Path::parse_input(input);
+        let mut path = Path::parse_input(input);
 
         let actual: Matrix<bool> = construct_visited(10);
 
         path.walk_the_path();
 
         assert!(actual == path.visited);
-        assert_eq!(41, path.count_avoided_positions());
+
+        assert_eq!(41, path.count_visited_positions());
 
 
     }
-*/
     #[test]
     fn test_setup_free_space() {
         let map = create_map();
